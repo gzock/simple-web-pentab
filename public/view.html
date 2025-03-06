@@ -1,132 +1,124 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>View Mode (with White Background Save)</title>
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no"
-    />
-    <style>
-      body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background: #fff;
-        user-select: none;
+<head>
+  <meta charset="UTF-8">
+  <title>View Mode (with White Background Save)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    body {
+      margin: 0; padding: 0; overflow: hidden;
+      background: #fff;
+      user-select: none;
+    }
+    #statusBar {
+      position: absolute;
+      top: 10px; left: 10px; z-index: 10;
+      background: rgba(255, 255, 255, 0.7);
+      padding: 8px; border-radius: 4px;
+      font-weight: bold;
+    }
+    #saveButton {
+      margin-left: 10px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+    canvas {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="statusBar">
+    <span id="connectionStatus">Connecting...</span>
+    <button id="saveButton">Save</button>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const saveButton = document.getElementById('saveButton');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // 接続状態表示
+    socket.on('connect', () => {
+      connectionStatus.textContent = 'Connected';
+    });
+    socket.on('disconnect', () => {
+      connectionStatus.textContent = 'Disconnected';
+    });
+
+    function drawLineLocally(x1, y1, x2, y2, { color, lineWidth, tool }) {
+      if (tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = color;
       }
-      #statusBar {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        z-index: 10;
-        background: rgba(255, 255, 255, 0.7);
-        padding: 8px;
-        border-radius: 4px;
-        font-weight: bold;
-      }
-      #saveButton {
-        margin-left: 10px;
-        cursor: pointer;
-        padding: 4px 8px;
-      }
-      canvas {
-        touch-action: none;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="statusBar">
-      <span id="connectionStatus">Connecting...</span>
-      <button id="saveButton">Save</button>
-    </div>
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = 'round';
 
-    <canvas id="canvas"></canvas>
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-      const socket = io();
-      const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d');
-      const connectionStatus = document.getElementById('connectionStatus');
-      const saveButton = document.getElementById('saveButton');
-
-      function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      }
-      window.addEventListener('resize', resizeCanvas);
-      resizeCanvas();
-
-      // 接続状態表示
-      socket.on('connect', () => {
-        connectionStatus.textContent = 'Connected';
-      });
-      socket.on('disconnect', () => {
-        connectionStatus.textContent = 'Disconnected';
-      });
-
-      function drawLineLocally(x1, y1, x2, y2, { color, lineWidth, tool }) {
-        if (tool === 'eraser') {
-          ctx.globalCompositeOperation = 'destination-out';
-        } else {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = color;
-        }
-        ctx.lineWidth = lineWidth;
-        ctx.lineCap = 'round';
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
-
-      // 既存履歴を一括反映
-      socket.on('initialLines', (lines) => {
-        lines.forEach((line) => {
-          drawLineLocally(line.x1, line.y1, line.x2, line.y2, {
-            color: line.color,
-            lineWidth: line.lineWidth,
-            tool: line.tool,
-          });
+    // 既存履歴を一括反映
+    socket.on('initialLines', (lines) => {
+      lines.forEach(line => {
+        drawLineLocally(line.x1, line.y1, line.x2, line.y2, {
+          color: line.color,
+          lineWidth: line.lineWidth,
+          tool: line.tool
         });
       });
+    });
 
-      // 他クライアントの描画も反映
-      socket.on('drawLine', (data) => {
-        drawLineLocally(data.x1, data.y1, data.x2, data.y2, {
-          color: data.color,
-          lineWidth: data.lineWidth,
-          tool: data.tool,
-        });
+    // 他クライアントの描画も反映
+    socket.on('drawLine', (data) => {
+      drawLineLocally(data.x1, data.y1, data.x2, data.y2, {
+        color: data.color,
+        lineWidth: data.lineWidth,
+        tool: data.tool
       });
+    });
 
-      socket.on('clearCanvas', () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      });
+    socket.on('clearCanvas', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
 
-      // ★ 保存ボタン (白背景) ★
-      saveButton.addEventListener('click', () => {
-        const offCanvas = document.createElement('canvas');
-        offCanvas.width = canvas.width;
-        offCanvas.height = canvas.height;
+    // ★ 保存ボタン (白背景) ★
+    saveButton.addEventListener('click', () => {
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = canvas.width;
+      offCanvas.height = canvas.height;
 
-        const offCtx = offCanvas.getContext('2d');
-        offCtx.fillStyle = '#ffffff';
-        offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+      const offCtx = offCanvas.getContext('2d');
+      offCtx.fillStyle = '#ffffff';
+      offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
 
-        offCtx.drawImage(canvas, 0, 0);
+      offCtx.drawImage(canvas, 0, 0);
 
-        const dataUrl = offCanvas.toDataURL('image/png');
+      const dataUrl = offCanvas.toDataURL('image/png');
 
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = 'canvas.png';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      });
-    </script>
-  </body>
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = 'canvas.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  </script>
+</body>
 </html>

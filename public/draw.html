@@ -1,236 +1,227 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Drawing Mode (with White Background Save)</title>
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no"
-    />
+<head>
+  <meta charset="UTF-8">
+  <title>Drawing Mode (with White Background Save)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-    <style>
-      body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background: #f0f0f0; /* ここを白にしない場合、見た目上はグレー背景 */
-        user-select: none;
-      }
-      #toolbar {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        z-index: 10;
-        background: rgba(255, 255, 255, 0.7);
-        padding: 8px;
-        border-radius: 4px;
-        display: flex;
-        gap: 12px;
-        align-items: center;
-      }
-      #toolbar label {
-        margin-right: 4px;
-      }
-      button {
-        cursor: pointer;
-        padding: 4px 8px;
-      }
-      .active {
-        background-color: #00ccff;
-        color: white;
-      }
-      canvas {
-        touch-action: none;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="toolbar">
-      <div>
-        <label for="penWidth">Pen Width:</label>
-        <input type="range" id="penWidth" min="1" max="20" value="3" />
-      </div>
-      <div>
-        <label for="eraserWidth">Eraser Width:</label>
-        <input type="range" id="eraserWidth" min="5" max="50" value="15" />
-      </div>
-      <div>
-        <label for="color">Color:</label>
-        <input type="color" id="color" value="#ff0000" />
-      </div>
-
-      <button id="penButton" class="active">Pen</button>
-      <button id="eraserButton">Eraser</button>
-
-      <button id="clearButton">Clear</button>
-      <button id="saveButton">Save</button>
+  <style>
+    body {
+      margin: 0; padding: 0; overflow: hidden;
+      background: #f0f0f0;  /* ここを白にしない場合、見た目上はグレー背景 */
+      user-select: none;
+    }
+    #toolbar {
+      position: absolute;
+      top: 10px; left: 10px; z-index: 10;
+      background: rgba(255, 255, 255, 0.7);
+      padding: 8px; border-radius: 4px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    #toolbar label {
+      margin-right: 4px;
+    }
+    button {
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+    .active {
+      background-color: #00ccff;
+      color: white;
+    }
+    canvas {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <div>
+      <label for="penWidth">Pen Width:</label>
+      <input type="range" id="penWidth" min="1" max="20" value="3">
+    </div>
+    <div>
+      <label for="eraserWidth">Eraser Width:</label>
+      <input type="range" id="eraserWidth" min="5" max="50" value="15">
+    </div>
+    <div>
+      <label for="color">Color:</label>
+      <input type="color" id="color" value="#ff0000">
     </div>
 
-    <canvas id="canvas"></canvas>
+    <button id="penButton" class="active">Pen</button>
+    <button id="eraserButton">Eraser</button>
 
-    <!-- Socket.IO クライアントスクリプト -->
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-      const socket = io();
+    <button id="clearButton">Clear</button>
+    <button id="saveButton">Save</button>
+  </div>
 
-      const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d');
+  <canvas id="canvas"></canvas>
 
-      function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+  <!-- Socket.IO クライアントスクリプト -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const penWidthInput    = document.getElementById('penWidth');
+    const eraserWidthInput = document.getElementById('eraserWidth');
+    const colorInput       = document.getElementById('color');
+    const penButton        = document.getElementById('penButton');
+    const eraserButton     = document.getElementById('eraserButton');
+    const clearButton      = document.getElementById('clearButton');
+    const saveButton       = document.getElementById('saveButton');
+
+    let currentTool = 'pen';
+
+    penButton.addEventListener('click', () => {
+      currentTool = 'pen';
+      updateToolButtonStyles();
+    });
+    eraserButton.addEventListener('click', () => {
+      currentTool = 'eraser';
+      updateToolButtonStyles();
+    });
+
+    function updateToolButtonStyles() {
+      if (currentTool === 'pen') {
+        penButton.classList.add('active');
+        eraserButton.classList.remove('active');
+      } else {
+        penButton.classList.remove('active');
+        eraserButton.classList.add('active');
       }
-      window.addEventListener('resize', resizeCanvas);
-      resizeCanvas();
+    }
 
-      const penWidthInput = document.getElementById('penWidth');
-      const eraserWidthInput = document.getElementById('eraserWidth');
-      const colorInput = document.getElementById('color');
-      const penButton = document.getElementById('penButton');
-      const eraserButton = document.getElementById('eraserButton');
-      const clearButton = document.getElementById('clearButton');
-      const saveButton = document.getElementById('saveButton');
+    let drawing = false;
+    let prevX = 0;
+    let prevY = 0;
 
-      let currentTool = 'pen';
+    canvas.addEventListener('pointerdown', (e) => {
+      drawing = true;
+      prevX = e.clientX;
+      prevY = e.clientY;
+      e.preventDefault();
+    });
 
-      penButton.addEventListener('click', () => {
-        currentTool = 'pen';
-        updateToolButtonStyles();
+    canvas.addEventListener('pointermove', (e) => {
+      if (!drawing) return;
+      const x = e.clientX;
+      const y = e.clientY;
+
+      const baseWidth = (currentTool === 'pen')
+        ? parseInt(penWidthInput.value, 10)
+        : parseInt(eraserWidthInput.value, 10);
+
+      drawLineLocally(prevX, prevY, x, y, {
+        color: colorInput.value,
+        lineWidth: baseWidth,
+        tool: currentTool
       });
-      eraserButton.addEventListener('click', () => {
-        currentTool = 'eraser';
-        updateToolButtonStyles();
+
+      socket.emit('drawLine', {
+        x1: prevX,
+        y1: prevY,
+        x2: x,
+        y2: y,
+        color: colorInput.value,
+        lineWidth: baseWidth,
+        tool: currentTool
       });
 
-      function updateToolButtonStyles() {
-        if (currentTool === 'pen') {
-          penButton.classList.add('active');
-          eraserButton.classList.remove('active');
-        } else {
-          penButton.classList.remove('active');
-          eraserButton.classList.add('active');
-        }
+      prevX = x;
+      prevY = y;
+      e.preventDefault();
+    });
+
+    canvas.addEventListener('pointerup', (e) => {
+      drawing = false;
+      e.preventDefault();
+    });
+    canvas.addEventListener('pointercancel', (e) => {
+      drawing = false;
+      e.preventDefault();
+    });
+
+    function drawLineLocally(x1, y1, x2, y2, { color, lineWidth, tool }) {
+      if (tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = color;
       }
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = 'round';
 
-      let drawing = false;
-      let prevX = 0;
-      let prevY = 0;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
 
-      canvas.addEventListener('pointerdown', (e) => {
-        drawing = true;
-        prevX = e.clientX;
-        prevY = e.clientY;
-        e.preventDefault();
+    socket.on('drawLine', (data) => {
+      drawLineLocally(data.x1, data.y1, data.x2, data.y2, {
+        color: data.color,
+        lineWidth: data.lineWidth,
+        tool: data.tool
       });
+    });
 
-      canvas.addEventListener('pointermove', (e) => {
-        if (!drawing) return;
-        const x = e.clientX;
-        const y = e.clientY;
-
-        const baseWidth =
-          currentTool === 'pen'
-            ? parseInt(penWidthInput.value, 10)
-            : parseInt(eraserWidthInput.value, 10);
-
-        drawLineLocally(prevX, prevY, x, y, {
-          color: colorInput.value,
-          lineWidth: baseWidth,
-          tool: currentTool,
-        });
-
-        socket.emit('drawLine', {
-          x1: prevX,
-          y1: prevY,
-          x2: x,
-          y2: y,
-          color: colorInput.value,
-          lineWidth: baseWidth,
-          tool: currentTool,
-        });
-
-        prevX = x;
-        prevY = y;
-        e.preventDefault();
-      });
-
-      canvas.addEventListener('pointerup', (e) => {
-        drawing = false;
-        e.preventDefault();
-      });
-      canvas.addEventListener('pointercancel', (e) => {
-        drawing = false;
-        e.preventDefault();
-      });
-
-      function drawLineLocally(x1, y1, x2, y2, { color, lineWidth, tool }) {
-        if (tool === 'eraser') {
-          ctx.globalCompositeOperation = 'destination-out';
-        } else {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = color;
-        }
-        ctx.lineWidth = lineWidth;
-        ctx.lineCap = 'round';
-
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
-
-      socket.on('drawLine', (data) => {
-        drawLineLocally(data.x1, data.y1, data.x2, data.y2, {
-          color: data.color,
-          lineWidth: data.lineWidth,
-          tool: data.tool,
+    socket.on('initialLines', (lines) => {
+      lines.forEach(line => {
+        drawLineLocally(line.x1, line.y1, line.x2, line.y2, {
+          color: line.color,
+          lineWidth: line.lineWidth,
+          tool: line.tool
         });
       });
+    });
 
-      socket.on('initialLines', (lines) => {
-        lines.forEach((line) => {
-          drawLineLocally(line.x1, line.y1, line.x2, line.y2, {
-            color: line.color,
-            lineWidth: line.lineWidth,
-            tool: line.tool,
-          });
-        });
-      });
+    // Clear
+    clearButton.addEventListener('click', () => {
+      socket.emit('clearCanvas');
+    });
+    socket.on('clearCanvas', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
 
-      // Clear
-      clearButton.addEventListener('click', () => {
-        socket.emit('clearCanvas');
-      });
-      socket.on('clearCanvas', () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      });
+    // ★ 保存ボタン (白背景で保存) ★
+    saveButton.addEventListener('click', () => {
+      // 1. 同サイズのオフスクリーンCanvasを作成
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = canvas.width;
+      offCanvas.height = canvas.height;
 
-      // ★ 保存ボタン (白背景で保存) ★
-      saveButton.addEventListener('click', () => {
-        // 1. 同サイズのオフスクリーンCanvasを作成
-        const offCanvas = document.createElement('canvas');
-        offCanvas.width = canvas.width;
-        offCanvas.height = canvas.height;
+      const offCtx = offCanvas.getContext('2d');
+      // 2. 背景を白で塗りつぶし
+      offCtx.fillStyle = '#ffffff';
+      offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
 
-        const offCtx = offCanvas.getContext('2d');
-        // 2. 背景を白で塗りつぶし
-        offCtx.fillStyle = '#ffffff';
-        offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+      // 3. メインcanvasをオフスクリーンに描画 (左上に貼り付け)
+      offCtx.drawImage(canvas, 0, 0);
 
-        // 3. メインcanvasをオフスクリーンに描画 (左上に貼り付け)
-        offCtx.drawImage(canvas, 0, 0);
+      // 4. オフスクリーンcanvasからデータURLを取得
+      const dataUrl = offCanvas.toDataURL('image/png');
 
-        // 4. オフスクリーンcanvasからデータURLを取得
-        const dataUrl = offCanvas.toDataURL('image/png');
-
-        // 5. ダウンロードリンク生成してクリック
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = 'canvas.png'; // ファイル名
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      });
-    </script>
-  </body>
+      // 5. ダウンロードリンク生成してクリック
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = 'canvas.png'; // ファイル名
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  </script>
+</body>
 </html>
