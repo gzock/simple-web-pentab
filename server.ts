@@ -1,10 +1,10 @@
 // server.ts
-import express, { Request, Response } from 'express';
+import express from 'express';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import path from 'path';
 
-// 描画データを型で定義
+// ストローク(線/消しゴム) データの型定義
 interface LineData {
   x1: number;
   y1: number;
@@ -12,51 +12,46 @@ interface LineData {
   y2: number;
   color: string;
   lineWidth: number;
+  tool: 'pen' | 'eraser'; // ペン or 消しゴム
 }
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// 静的ファイル (public フォルダ) を配信
+// public フォルダを静的配信
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// これまでに描かれた全ストロークを保持する配列
+// これまで描かれた全ストロークを保持する配列
 let drawnLines: LineData[] = [];
 
-// Socket 接続
+// Socket.IO 接続
 io.on('connection', (socket: Socket) => {
   console.log('A user connected:', socket.id);
 
-  // 接続クライアントに今までの描画履歴を送信
+  // 新規接続クライアントに現在の描画履歴を送る
   socket.emit('initialLines', drawnLines);
 
-  // クライアントからの描画イベントを受け取る
+  // クライアントからストロークデータを受信
   socket.on('drawLine', (data: LineData) => {
     drawnLines.push(data);
+    // 他クライアントにブロードキャスト
     socket.broadcast.emit('drawLine', data);
   });
 
-  // "clearCanvas" イベントを受け取ったとき
+  // クリア要求
   socket.on('clearCanvas', () => {
-    // サーバー側の履歴をクリア
+    // サーバー側の履歴もクリア
     drawnLines = [];
-    // 全クライアントにキャンバスクリアの通知
+    // 全クライアントにクリアを通知
     io.emit('clearCanvas');
   });
 
-  // クライアント切断時
+  // 切断時
   socket.on('disconnect', () => {
     console.log('A user disconnected:', socket.id);
   });
 });
-
-// もし任意のルートを設けるなら (例: /draw, /view)
-// ただし今回、publicフォルダに置いたHTMLを直接参照しているので、
-// 明示的なルーティングは不要。
-// app.get('/draw', (req: Request, res: Response) => {
-//   res.sendFile(path.join(__dirname, '..', 'public', 'draw.html'));
-// });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
