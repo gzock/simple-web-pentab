@@ -2,13 +2,13 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Drawing Mode (with White Background Save)</title>
+  <title>Drawing Mode (Auto Switch by Width Sliders)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
   <style>
     body {
       margin: 0; padding: 0; overflow: hidden;
-      background: #f0f0f0;  /* ここを白にしない場合、見た目上はグレー背景 */
+      background: #f0f0f0; /* ここでは見た目上グレー、保存時だけ白背景 */
       user-select: none;
     }
     #toolbar {
@@ -16,9 +16,7 @@
       top: 10px; left: 10px; z-index: 10;
       background: rgba(255, 255, 255, 0.7);
       padding: 8px; border-radius: 4px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
+      display: flex; gap: 12px; align-items: center;
     }
     #toolbar label {
       margin-right: 4px;
@@ -60,7 +58,7 @@
 
   <canvas id="canvas"></canvas>
 
-  <!-- Socket.IO クライアントスクリプト -->
+  <!-- Socket.IOクライアントスクリプト -->
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
@@ -83,13 +81,25 @@
     const clearButton      = document.getElementById('clearButton');
     const saveButton       = document.getElementById('saveButton');
 
+    // 現在のツール ('pen' or 'eraser')
     let currentTool = 'pen';
 
+    // ------ ツール切り替え制御 ------
     penButton.addEventListener('click', () => {
       currentTool = 'pen';
       updateToolButtonStyles();
     });
     eraserButton.addEventListener('click', () => {
+      currentTool = 'eraser';
+      updateToolButtonStyles();
+    });
+
+    // スライダー操作時にツールを自動切り替え
+    penWidthInput.addEventListener('input', () => {
+      currentTool = 'pen';
+      updateToolButtonStyles();
+    });
+    eraserWidthInput.addEventListener('input', () => {
       currentTool = 'eraser';
       updateToolButtonStyles();
     });
@@ -104,6 +114,7 @@
       }
     }
 
+    // ------ 描画処理 ------
     let drawing = false;
     let prevX = 0;
     let prevY = 0;
@@ -120,6 +131,7 @@
       const x = e.clientX;
       const y = e.clientY;
 
+      // 現在モードに応じた線幅
       const baseWidth = (currentTool === 'pen')
         ? parseInt(penWidthInput.value, 10)
         : parseInt(eraserWidthInput.value, 10);
@@ -170,6 +182,7 @@
       ctx.stroke();
     }
 
+    // ------ ソケットイベント ------
     socket.on('drawLine', (data) => {
       drawLineLocally(data.x1, data.y1, data.x2, data.y2, {
         color: data.color,
@@ -188,17 +201,18 @@
       });
     });
 
-    // Clear
-    clearButton.addEventListener('click', () => {
-      socket.emit('clearCanvas');
-    });
     socket.on('clearCanvas', () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     });
 
-    // ★ 保存ボタン (白背景で保存) ★
+    // ------ Clear ボタン ------
+    clearButton.addEventListener('click', () => {
+      socket.emit('clearCanvas');
+    });
+
+    // ------ Save ボタン（白背景で保存） ------
     saveButton.addEventListener('click', () => {
-      // 1. 同サイズのオフスクリーンCanvasを作成
+      // 1. オフスクリーンCanvasを作成
       const offCanvas = document.createElement('canvas');
       offCanvas.width = canvas.width;
       offCanvas.height = canvas.height;
@@ -208,16 +222,14 @@
       offCtx.fillStyle = '#ffffff';
       offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
 
-      // 3. メインcanvasをオフスクリーンに描画 (左上に貼り付け)
+      // 3. メインcanvasをオフスクリーンに合成
       offCtx.drawImage(canvas, 0, 0);
 
-      // 4. オフスクリーンcanvasからデータURLを取得
+      // 4. DataURL → ダウンロード
       const dataUrl = offCanvas.toDataURL('image/png');
-
-      // 5. ダウンロードリンク生成してクリック
       const link = document.createElement('a');
       link.href = dataUrl;
-      link.download = 'canvas.png'; // ファイル名
+      link.download = 'canvas.png';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
