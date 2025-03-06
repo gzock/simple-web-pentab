@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Drawing Mode</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #f0f0f0;
+        user-select: none;
+      }
+      #toolbar {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.7);
+        padding: 8px;
+        border-radius: 4px;
+      }
+      #toolbar button {
+        margin-left: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <label for="lineWidth">Line Width:</label>
+      <input type="range" id="lineWidth" min="1" max="20" value="3" />
+      <label for="color">Color:</label>
+      <input type="color" id="color" value="#ff0000" />
+      <button id="clearButton">Clear</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <!-- Socket.IOクライアントスクリプト (CDN or /socket.io/socket.io.js) -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // ツールバー要素を取得
+      const lineWidthInput = document.getElementById('lineWidth');
+      const colorInput = document.getElementById('color');
+      const clearButton = document.getElementById('clearButton');
+
+      // マウスのドラッグ状態と前回の座標を保持
+      let drawing = false;
+      let prevX = 0;
+      let prevY = 0;
+
+      canvas.addEventListener('mousedown', (e) => {
+        drawing = true;
+        prevX = e.clientX;
+        prevY = e.clientY;
+      });
+
+      canvas.addEventListener('mousemove', (e) => {
+        if (!drawing) return;
+        const x = e.clientX;
+        const y = e.clientY;
+
+        // ローカル画面に描画
+        drawLineLocally(
+          prevX,
+          prevY,
+          x,
+          y,
+          colorInput.value,
+          lineWidthInput.value
+        );
+
+        // ストローク情報をサーバーへ送信
+        socket.emit('drawLine', {
+          x1: prevX,
+          y1: prevY,
+          x2: x,
+          y2: y,
+          color: colorInput.value,
+          lineWidth: lineWidthInput.value,
+        });
+
+        prevX = x;
+        prevY = y;
+      });
+
+      canvas.addEventListener('mouseup', () => (drawing = false));
+      canvas.addEventListener('mouseleave', () => (drawing = false));
+
+      // ローカルキャンバスに描画
+      function drawLineLocally(x1, y1, x2, y2, color, lineWidth) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      // サーバーからの描画イベント
+      socket.on('drawLine', (data) => {
+        drawLineLocally(
+          data.x1,
+          data.y1,
+          data.x2,
+          data.y2,
+          data.color,
+          data.lineWidth
+        );
+      });
+
+      // サーバーから初期履歴
+      socket.on('initialLines', (lines) => {
+        lines.forEach((line) => {
+          drawLineLocally(
+            line.x1,
+            line.y1,
+            line.x2,
+            line.y2,
+            line.color,
+            line.lineWidth
+          );
+        });
+      });
+
+      // Clearボタンを押したらサーバーに通知
+      clearButton.addEventListener('click', () => {
+        socket.emit('clearCanvas');
+      });
+
+      // サーバーから「clearCanvas」通知がきたらローカルをクリア
+      socket.on('clearCanvas', () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      });
+    </script>
+  </body>
+</html>

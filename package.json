@@ -1,0 +1,20 @@
+{
+  "name": "simple-web-pentab",
+  "version": "1.0.0",
+  "description": "Like a simple pen tab to be used via the web",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.9",
+    "@types/socket.io": "^3.0.1",
+    "typescript": "^5.8.2"
+  }
+}
